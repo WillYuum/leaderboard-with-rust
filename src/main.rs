@@ -1,6 +1,7 @@
 use actix_web::{get, web, App, HttpResponse, HttpServer, Responder};
-use rusqlite::{OpenFlags, Result};
+use rusqlite::OpenFlags;
 use std::sync::{Arc, Mutex};
+use time::OffsetDateTime;
 
 mod database;
 use database::{create_table, get_all_leaderboard_data, update_leaderboard, LeaderboardEntry};
@@ -38,8 +39,16 @@ async fn main() -> std::io::Result<()> {
 
         App::new()
             .app_data(web::Data::new(conn.clone())) // Wrap conn with Data::new()
+            .route(
+                "/leaderboard/get-highscore/{id}",
+                web::get().to(get_user_highscore),
+            )
             .route("/leaderboard", web::get().to(get_leaderboard))
-        // .route("/leaderboard/{id}", web::post().to(update_score))
+            .route("/leaderboard/{id}", web::post().to(update_score))
+            .route(
+                "/leaderboard/{username}/{highscore}",
+                web::post().to(create_new_user),
+            )
     })
     .bind(addr)?
     .run()
@@ -65,17 +74,57 @@ async fn get_leaderboard(data: web::Data<Arc<Mutex<Connection>>>) -> impl Respon
     }
 }
 
-// async fn update_score(
-//     data: web::Data<Connection>,
-//     web::Path(id): web::Path<i32>,
-//     web::Json(score): web::Json<i32>,
-// ) -> impl Responder {
-//     println!("POST /leaderboard/{}", id);
-//     match update_leaderboard(&data, id, score) {
-//         Ok(_) => HttpResponse::Ok().finish(),
-//         Err(_) => HttpResponse::InternalServerError().finish(),
-//     }
-// }
+async fn get_user_highscore(
+    data: web::Data<Arc<Mutex<Connection>>>,
+    path: web::Path<(String,)>,
+) -> impl Responder {
+    println!("GET /leaderboard/{}", path.0);
+    let conn = data.lock().unwrap();
+    match database::get_user_highscore(&conn, &path.0) {
+        Ok(data) => {
+            let response = data;
+            HttpResponse::Ok().json(response)
+        }
+        Err(_) => HttpResponse::InternalServerError().finish(),
+    }
+}
+
+async fn update_score(
+    data: web::Data<Arc<Mutex<Connection>>>,
+    path: web::Path<(i32,)>,
+) -> impl Responder {
+    println!("POST /leaderboard/{}", path.0);
+    let conn = data.lock().unwrap();
+    match update_leaderboard(&conn, path.0, 100) {
+        Ok(_) => HttpResponse::Ok().finish(),
+        Err(_) => HttpResponse::InternalServerError().finish(),
+    }
+}
+
+async fn create_new_user(
+    data: web::Data<Arc<Mutex<Connection>>>,
+    path: web::Path<(String, String)>,
+) -> impl Responder {
+    let conn = data.lock().unwrap();
+
+    let result = database::user_exists(&conn, &path.0).unwrap();
+
+    match result {
+        true => {
+            println!("User already exists");
+            return HttpResponse::Ok().finish();
+        }
+        false => {
+            let time_stamp = OffsetDateTime::now_utc();
+            println!("Creating user at time{}", OffsetDateTime::now_utc());
+            println!("POST /leaderboard/{} {}", path.0, path.1);
+            match database::add_new_user(&conn, &path.0, &path.1, &time_stamp.to_string()) {
+                Ok(_) => HttpResponse::Ok().finish(),
+                Err(_) => HttpResponse::InternalServerError().finish(),
+            }
+        }
+    }
+}
 
 fn unwrap_env_var(var_name: &str, fallback: &str) -> String {
     use std::env::var as env_var;

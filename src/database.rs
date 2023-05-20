@@ -44,3 +44,30 @@ pub fn update_leaderboard(conn: &Connection, id: i32, new_score: i32) -> Result<
     )?;
     Ok(())
 }
+
+pub fn add_new_user(
+    conn: &Connection,
+    username: &str,
+    highscore: &str,
+    date_created: &str,
+) -> Result<()> {
+    conn.execute(
+        "INSERT INTO leaderboard (username, highscore, date_created) VALUES (?1, ?2, ?3)",
+        &[&username, &highscore, &date_created],
+    )?;
+    Ok(())
+}
+
+pub fn get_user_highscore(conn: &Connection, id: &str) -> Result<i32> {
+    let query = "SELECT highscore FROM leaderboard WHERE id = ?1";
+    let mut stmt = conn.prepare(query)?;
+    let highscore: i32 = stmt.query_row(&[id], |row| row.get(0))?;
+    Ok(highscore)
+}
+
+pub fn user_exists(conn: &Connection, username: &str) -> Result<bool> {
+    let query = "SELECT COUNT(*) FROM leaderboard WHERE username = ?1";
+    let mut stmt = conn.prepare(query)?;
+    let count: i32 = stmt.query_row(&[username], |row| row.get(0))?;
+    Ok(count > 0)
+}
