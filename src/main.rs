@@ -40,14 +40,14 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(web::Data::new(conn.clone())) // Wrap conn with Data::new()
             .route(
-                "/leaderboard/get-highscore/{id}",
-                web::get().to(get_user_highscore),
-            )
-            .route("/leaderboard", web::get().to(get_leaderboard))
-            .route("/leaderboard/{id}", web::post().to(update_score))
-            .route(
-                "/leaderboard/{username}/{highscore}",
+                "/add-to-leaderboard/{username}/{highscore}",
                 web::post().to(create_new_user),
+            )
+            .route("/get-leaderboard", web::get().to(get_leaderboard))
+            .route("/get-leaderboard/{id}", web::get().to(get_user_highscore))
+            .route(
+                "/udpate-leaderboard/{id}/{newScore}",
+                web::post().to(update_score),
             )
     })
     .bind(addr)?
@@ -91,11 +91,11 @@ async fn get_user_highscore(
 
 async fn update_score(
     data: web::Data<Arc<Mutex<Connection>>>,
-    path: web::Path<(i32,)>,
+    path: web::Path<(i32, i32)>,
 ) -> impl Responder {
     println!("POST /leaderboard/{}", path.0);
     let conn = data.lock().unwrap();
-    match update_leaderboard(&conn, path.0, 100) {
+    match update_leaderboard(&conn, path.0, path.1) {
         Ok(_) => HttpResponse::Ok().finish(),
         Err(_) => HttpResponse::InternalServerError().finish(),
     }
