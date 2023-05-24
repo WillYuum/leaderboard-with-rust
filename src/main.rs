@@ -1,4 +1,4 @@
-use actix_web::{get, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use rusqlite::OpenFlags;
 use std::sync::{Arc, Mutex};
 use time::OffsetDateTime;
@@ -34,6 +34,8 @@ async fn main() -> std::io::Result<()> {
     let port = unwrap_env_var("PORT", "8080");
     let addr = format!("{}:{}", domain, port);
 
+    println!("Running server on http://{}", &addr);
+
     HttpServer::new(move || {
         let conn = shared_conn.clone();
 
@@ -50,20 +52,15 @@ async fn main() -> std::io::Result<()> {
                 web::post().to(update_score),
             )
     })
-    .bind(addr)?
+    .bind(&addr)?
     .run()
     .await?;
 
     Ok(())
 }
 
-#[get("/test")]
-async fn greet() -> impl Responder {
-    format!("Running leaderboard with rust!")
-}
-
 async fn get_leaderboard(data: web::Data<Arc<Mutex<Connection>>>) -> impl Responder {
-    println!("GET /leaderboard");
+    println!("GET /leaderboard ALL");
     let conn = data.lock().unwrap();
     match get_all_leaderboard_data(&conn) {
         Ok(data) => {
@@ -76,12 +73,20 @@ async fn get_leaderboard(data: web::Data<Arc<Mutex<Connection>>>) -> impl Respon
 
 async fn get_user_highscore(
     data: web::Data<Arc<Mutex<Connection>>>,
-    path: web::Path<(String,)>,
+    path: web::Path<String>,
 ) -> impl Responder {
-    println!("GET /leaderboard/{}", path.0);
+    struct GetHighScoreQuery {
+        id: String,
+    }
+
+    let query: String = path.into_inner();
+    let new_user_query = GetHighScoreQuery { id: query };
+
     let conn = data.lock().unwrap();
-    match database::get_user_highscore(&conn, &path.0) {
+    match database::get_user_highscore(&conn, &new_user_query.id) {
         Ok(data) => {
+            println!("GET /leaderboard/ highscore: {}", &data);
+
             let response = data;
             HttpResponse::Ok().json(response)
         }
@@ -93,9 +98,20 @@ async fn update_score(
     data: web::Data<Arc<Mutex<Connection>>>,
     path: web::Path<(i32, i32)>,
 ) -> impl Responder {
-    println!("POST /leaderboard/{}", path.0);
+    struct UpdateScoreQuery {
+        id: i32,
+        new_highscore: i32,
+    }
+
+    let query: (i32, i32) = path.into_inner();
+    let new_user_query = UpdateScoreQuery {
+        id: query.0,
+        new_highscore: query.1,
+    };
+
     let conn = data.lock().unwrap();
-    match update_leaderboard(&conn, path.0, path.1) {
+    let result = update_leaderboard(&conn, new_user_query.id, new_user_query.new_highscore);
+    match result {
         Ok(_) => HttpResponse::Ok().finish(),
         Err(_) => HttpResponse::InternalServerError().finish(),
     }
@@ -105,24 +121,30 @@ async fn create_new_user(
     data: web::Data<Arc<Mutex<Connection>>>,
     path: web::Path<(String, String)>,
 ) -> impl Responder {
-    let conn = data.lock().unwrap();
+    struct NewUserQuery {
+        username: String,
+        highscore: String,
+    }
 
-    let result = database::user_exists(&conn, &path.0).unwrap();
+    let query = path.into_inner();
+    let new_user_query = NewUserQuery {
+        username: query.0,
+        highscore: query.1,
+    };
+
+    let time_stamp = OffsetDateTime::now_utc();
+
+    let conn = data.lock().unwrap();
+    let result = database::add_new_user(
+        &conn,
+        &new_user_query.username,
+        &new_user_query.highscore,
+        &time_stamp.to_string(),
+    );
 
     match result {
-        true => {
-            println!("User already exists");
-            return HttpResponse::Ok().finish();
-        }
-        false => {
-            let time_stamp = OffsetDateTime::now_utc();
-            println!("Creating user at time{}", OffsetDateTime::now_utc());
-            println!("POST /leaderboard/{} {}", path.0, path.1);
-            match database::add_new_user(&conn, &path.0, &path.1, &time_stamp.to_string()) {
-                Ok(_) => HttpResponse::Ok().finish(),
-                Err(_) => HttpResponse::InternalServerError().finish(),
-            }
-        }
+        Ok(_) => HttpResponse::Ok().finish(),
+        Err(_) => HttpResponse::InternalServerError().finish(),
     }
 }
 

@@ -1,8 +1,8 @@
 use rusqlite::{Connection, Result};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct LeaderboardEntry {
     pub id: i32,
     pub username: String,
@@ -47,9 +47,9 @@ pub fn update_leaderboard(conn: &Connection, id: i32, new_score: i32) -> Result<
 
 pub fn add_new_user(
     conn: &Connection,
-    username: &str,
-    highscore: &str,
-    date_created: &str,
+    username: &String,
+    highscore: &String,
+    date_created: &String,
 ) -> Result<()> {
     conn.execute(
         "INSERT INTO leaderboard (username, highscore, date_created) VALUES (?1, ?2, ?3)",
@@ -58,7 +58,7 @@ pub fn add_new_user(
     Ok(())
 }
 
-pub fn get_user_highscore(conn: &Connection, id: &str) -> Result<i32> {
+pub fn get_user_highscore(conn: &Connection, id: &String) -> Result<i32> {
     let query = "SELECT highscore FROM leaderboard WHERE id = ?1";
     let mut stmt = conn.prepare(query)?;
     let highscore: i32 = stmt.query_row(&[id], |row| row.get(0))?;
