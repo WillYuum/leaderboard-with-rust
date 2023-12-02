@@ -5,7 +5,10 @@
 
 ---
 
-## How to run
+## How to run docker with project:
+- Use [Dev Container](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) to open the project.
+
+## How to run backend
 - Make sure you have rust installed.
 - Add .env file with the following variables like in `.env.example`.
 - Run `cargo run` to start the server.
