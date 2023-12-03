@@ -1,3 +1,4 @@
+use actix_cors::Cors;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use rusqlite::OpenFlags;
 use std::sync::{Arc, Mutex};
@@ -39,6 +40,13 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         let conn = shared_conn.clone();
 
+        // let local_origin: &str = &format!("https://www.testing_origin{}", &port);
+        let local_origin: &str = "http://your-game-client-domain.com";
+        let created_cors = Cors::default()
+            .allowed_origin(local_origin)
+            .allowed_methods(vec!["GET", "POST"])
+            .max_age(3600);
+
         App::new()
             .app_data(web::Data::new(conn.clone())) // Wrap conn with Data::new()
             .route(
@@ -51,6 +59,7 @@ async fn main() -> std::io::Result<()> {
                 "/udpate-leaderboard/{id}/{newScore}",
                 web::post().to(update_score),
             )
+            .wrap(created_cors)
     })
     .bind(&addr)?
     .run()
